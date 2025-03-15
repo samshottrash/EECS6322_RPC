@@ -18,3 +18,5 @@ dependencies:
       - pudb
       - transformers
       - pillow
+      - sparse_autoencoder
+      - clip
