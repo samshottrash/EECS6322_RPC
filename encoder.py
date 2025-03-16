@@ -3,7 +3,6 @@ from torchvision import datasets, transforms
 import numpy as np
 from PIL import Image
 import requests
-from transformers import CLIPFeatureExtractor
 import clip
 from sparse_autoencoder import (
     ActivationResamplerHyperparameters,
@@ -27,8 +26,24 @@ from sparse_autoencoder import (
 # so we get our pre-trained CLIP model
 # "We use CLIP [S16] ResNet-50 [S5], ViT-B/16 [S4], and
 # ViT-L/14 [S4] pre-trained feature extractors from the official repository"
-model_14, preprocess_14 = CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch14")
-model_16, preprocess_16 = CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch16")
+
+print(clip.available_models())
+models = {
+    "resnet50": "RN50",
+    "vit_b16": "ViT-B/16",
+    "vit_l14": "ViT-L/14"
+}
+
+def load_clip(model_name):
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, preprocess = clip.load(model_name, device=device)
+    
+    return model, preprocess
+
+clip_model, preprocess = load_clip(models["resnet50"])
+
+# use model.encode_image() to get the image features of each img in CC3M
 
 
 # The paper trains the SAE with an L_2 reconstruction loss & an L_1 sparsity 
@@ -47,11 +62,17 @@ sweep_config = SweepConfig(
         optimizer=OptimizerHyperparameters(
             lr=Parameter(values=[1e-5, 5e-5, 1e-4, 5e-4, 1e-3]),
         ),
+        source_model=SourceModelHyperparameters(
+            name=Parameter("openai/clip"), # idk if i should specify the model
+            cache_names=Parameter(["vision_model.encoder.layers.11"]),  # Extract from last layer
+            hook_dimension=Parameter(768 if clip_model == "ViT-B/16" else 1024)
+        ),
         source_data=SourceDataHyperparameters(
             dataset_path=Parameter("conceptual_captions"),  # CC3M dataset
             context_size=Parameter(256),  # Number of tokens/images to process per batch
             pre_tokenized=Parameter(value=False),  # CC3M is not pre-tokenized
-            pre_download=Parameter(value=False)  # Stream instead of downloading
+            pre_download=Parameter(value=False),  # Stream instead of downloading
+            tokenizer_name=Parameter("openai/clip-vit-base-patch32")
         ),
         autoencoder=AutoencoderHyperparameters(
             expansion_factor=Parameter(values=[2,4,8])

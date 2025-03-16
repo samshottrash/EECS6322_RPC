@@ -19,4 +19,7 @@ dependencies:
       - transformers
       - pillow
       - sparse_autoencoder
-      - clip
+      - git+https://github.com/openai/CLIP.git
+    # these are dumb modules I had to install for the sparse_autoencoder library
+      - jaxtyping
+      - transformer_lens
