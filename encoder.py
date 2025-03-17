@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import requests
 import clip
+from datasets import load_dataset
 from sparse_autoencoder import (
     ActivationResamplerHyperparameters,
     AutoencoderHyperparameters,
@@ -33,18 +34,34 @@ models = {
     "vit_b16": "ViT-B/16",
     "vit_l14": "ViT-L/14"
 }
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def load_clip(model_name):
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     model, preprocess = clip.load(model_name, device=device)
     
     return model, preprocess
 
-clip_model, preprocess = load_clip(models["resnet50"])
+clip_model_name = models["resnet50"]
+clip_model, preprocess = load_clip(clip_model_name)
 
 # use model.encode_image() to get the image features of each img in CC3M
+def get_features(image):
 
+    # prepare image for feature extraction
+    print("here")
+    print(image)
+    image_input = preprocess(Image.open(image["image_url"])).unsqueeze(0).to(device)
+
+    # Calculate features
+    with torch.no_grad():
+        image_features = clip_model.encode_image(image_input)
+    
+    return {"clip_features": image_features}
+
+dataset = load_dataset("conceptual_captions", split="train")
+dataset = dataset.map(get_features)
+dataset.save_to_disk("cc3m_clip_features")  # Save processed dataset
 
 # The paper trains the SAE with an L_2 reconstruction loss & an L_1 sparsity 
 # regularisation, with a hyperparameter lambda_1
@@ -65,10 +82,10 @@ sweep_config = SweepConfig(
         source_model=SourceModelHyperparameters(
             name=Parameter("openai/clip"), # idk if i should specify the model
             cache_names=Parameter(["vision_model.encoder.layers.11"]),  # Extract from last layer
-            hook_dimension=Parameter(768 if clip_model == "ViT-B/16" else 1024)
+            hook_dimension=Parameter(768 if clip_model_name == "ViT-B/16" else 1024)
         ),
         source_data=SourceDataHyperparameters(
-            dataset_path=Parameter("conceptual_captions"),  # CC3M dataset
+            dataset_path=Parameter("cc3m_clip_features"),  # CC3M dataset
             context_size=Parameter(256),  # Number of tokens/images to process per batch
             pre_tokenized=Parameter(value=False),  # CC3M is not pre-tokenized
             pre_download=Parameter(value=False),  # Stream instead of downloading
@@ -77,6 +94,8 @@ sweep_config = SweepConfig(
         autoencoder=AutoencoderHyperparameters(
             expansion_factor=Parameter(values=[2,4,8])
         ),
+        num_epochs = Parameter(200),
+        resample_interval = Parameter(10)
     ),
     method=Method.RANDOM,
 )
