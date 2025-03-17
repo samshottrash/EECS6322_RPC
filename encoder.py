@@ -23,7 +23,6 @@ from sparse_autoencoder import (
 )
 
 # For the dataset: "We train our sparse autoencoders on the CC3M dataset"
-#dataset = load_dataset("conceptual_captions", split="train", streaming=True)
 
 # the paper says they discovered concepts the CLIP model has learnt using an SAE, 
 # so we get our pre-trained CLIP model
