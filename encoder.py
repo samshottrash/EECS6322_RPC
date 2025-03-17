@@ -3,6 +3,7 @@ from torchvision import datasets, transforms
 import numpy as np
 from PIL import Image
 import requests
+from io import BytesIO
 import clip
 from datasets import load_dataset
 from sparse_autoencoder import (
@@ -13,6 +14,7 @@ from sparse_autoencoder import (
     Method,
     OptimizerHyperparameters,
     Parameter,
+    Pipeline,
     PipelineHyperparameters,
     SourceDataHyperparameters,
     SourceModelHyperparameters,
@@ -49,19 +51,36 @@ clip_model, preprocess = load_clip(clip_model_name)
 def get_features(image):
 
     # prepare image for feature extraction
-    print("here")
-    print(image)
-    image_input = preprocess(Image.open(image["image_url"])).unsqueeze(0).to(device)
+    # print("here")
+    # print(image)
 
-    # Calculate features
-    with torch.no_grad():
-        image_features = clip_model.encode_image(image_input)
-    
-    return {"clip_features": image_features}
+    image_url = image["image_url"]
+
+    try:
+        response = requests.get(image_url, timeout=5)
+        response.raise_for_status() # raises if fails
+        image = Image.open(BytesIO(response.content))
+        image_input = preprocess(image).unsqueeze(0).to(device)
+
+        # Calculate features
+        with torch.no_grad():
+            image_features = clip_model.encode_image(image_input)
+        
+        return {"clip_features": image_features}
+        
+    except Exception as e:
+        print(f"Error downloading {image_url}: {e}")
+        return {"clip_features": None}
+        
 
 dataset = load_dataset("conceptual_captions", split="train")
 dataset = dataset.map(get_features)
+
+# filter out failed images
+dataset = dataset.filter(lambda x: x["clip_features"] is not None)
 dataset.save_to_disk("cc3m_clip_features")  # Save processed dataset
+
+print(len(dataset))
 
 # The paper trains the SAE with an L_2 reconstruction loss & an L_1 sparsity 
 # regularisation, with a hyperparameter lambda_1
@@ -100,3 +119,6 @@ sweep_config = SweepConfig(
     method=Method.RANDOM,
 )
 
+pipeline = Pipeline(sweep_config)
+
+num_neurons_fired = pipeline.train_autoencoder()
