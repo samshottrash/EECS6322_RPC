@@ -22,9 +22,9 @@ cause the sae library is for texts, not images. Hmm... not sure tbh
 Dont think it would be too hard tho
 '''
 
-from config import clip_model_name
+# from config import clip_model_name
 
-def get_sweep_config():
+def get_sweep_config(clip_model_name):
     sweep_config = SweepConfig(
         parameters=Hyperparameters(
             loss=LossHyperparameters(
@@ -33,11 +33,11 @@ def get_sweep_config():
             optimizer=OptimizerHyperparameters(
                 lr=Parameter(values=[1e-5, 5e-5, 1e-4, 5e-4, 1e-3])
             ),
-            source_model=SourceModelHyperparameters(
-                name=Parameter("openai/clip"),
-                cache_names=Parameter(["vision_model.encoder.layers.11"]),
-                hook_dimension=Parameter(768 if clip_model_name == "ViT-B/16" else 1024)
-            ),
+            # source_model=SourceModelHyperparameters(
+            #    name=Parameter("openai/clip"),
+            #   cache_names=Parameter(["vision_model.encoder.layers.11"]),
+            #    hook_dimension=Parameter(768 if clip_model_name == "ViT-B/16" else 1024)
+            # ),
             source_data=SourceDataHyperparameters(
                 dataset_path=Parameter("cc3m_clip_features"),
                 context_size=Parameter(256),
@@ -48,8 +48,8 @@ def get_sweep_config():
             autoencoder=AutoencoderHyperparameters(
                 expansion_factor=Parameter(values=[2, 4, 8])
             ),
-            num_epochs=Parameter(200),
-            resample_interval=Parameter(10)
+            # num_epochs=Parameter(200),
+            #resample_interval=Parameter(10)
         ),
         method=Method.RANDOM
     )
@@ -57,7 +57,7 @@ def get_sweep_config():
 
     return sweep_config
 
-def train_autoencoder():
+def train_autoencoder(clip_model_name):
 
     '''
     changed it from pipeline to their example in the colab
@@ -69,5 +69,5 @@ def train_autoencoder():
     # pipeline = Pipeline(sweep_config)
     # num_neurons_fired = pipeline.train_autoencoder()
 
-    sweep_config = get_sweep_config()
+    sweep_config = get_sweep_config(clip_model_name)
     sweep(sweep_config=sweep_config)
