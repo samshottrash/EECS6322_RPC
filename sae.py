@@ -1,73 +1,98 @@
-from sparse_autoencoder import (
-    ActivationResamplerHyperparameters,
-    AutoencoderHyperparameters,
-    Hyperparameters,
-    LossHyperparameters,
-    Method,
-    OptimizerHyperparameters,
-    Parameter,
-    Pipeline,
-    PipelineHyperparameters,
-    SourceDataHyperparameters,
-    SourceModelHyperparameters,
-    SweepConfig,
-    sweep,
-)
+import torch
+import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+from datasets import load_dataset
+from tqdm import tqdm
+from pathlib import Path
 
-'''
-Also need to add approprate comments from notebook
 
-Also beginning to think, might just have to implement our own sae????
-cause the sae library is for texts, not images. Hmm... not sure tbh
-Dont think it would be too hard tho
-'''
+# TODO: Go through article and add comments explaining
 
-# from config import clip_model_name
+# the autoencoder model, implemented according to details from article
+class AutoEncoder(nn.Module):
+    def __init__(self, device, acts_dim=1024, exp=8, l1_coeff=3e-4):
+        super().__init__()
+        dtype = torch.float32
+        # torch.manual_seed(42)
 
-def get_sweep_config(clip_model_name):
-    sweep_config = SweepConfig(
-        parameters=Hyperparameters(
-            loss=LossHyperparameters(
-                l1_coefficient=Parameter(values=[3e-5, 1.5e-4, 3e-4, 1.5e-3, 3e-3])
-            ),
-            optimizer=OptimizerHyperparameters(
-                lr=Parameter(values=[1e-5, 5e-5, 1e-4, 5e-4, 1e-3])
-            ),
-            # source_model=SourceModelHyperparameters(
-            #    name=Parameter("openai/clip"),
-            #   cache_names=Parameter(["vision_model.encoder.layers.11"]),
-            #    hook_dimension=Parameter(768 if clip_model_name == "ViT-B/16" else 1024)
-            # ),
-            source_data=SourceDataHyperparameters(
-                dataset_path=Parameter("cc3m_clip_features"),
-                context_size=Parameter(256),
-                pre_tokenized=Parameter(False),
-                pre_download=Parameter(False),
-                tokenizer_name=Parameter("openai/clip-vit-base-patch32")
-            ),
-            autoencoder=AutoencoderHyperparameters(
-                expansion_factor=Parameter(values=[2, 4, 8])
-            ),
-            # num_epochs=Parameter(200),
-            #resample_interval=Parameter(10)
-        ),
-        method=Method.RANDOM
-    )
-    # sweep(sweep_config=sweep_config)
+        self.acts_dim = acts_dim
+        self.latent_dim = acts_dim * exp
+        self.l1_coeff = l1_coeff
 
-    return sweep_config
+        self.W_enc = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(acts_dim, self.latent_dim, dtype=dtype)))
+        self.W_dec = nn.Parameter(torch.nn.init.kaiming_uniform_(torch.empty(self.latent_dim, acts_dim, dtype=dtype)))
+        self.b_enc = nn.Parameter(torch.zeros(self.latent_dim, dtype=dtype))
+        self.b_dec = nn.Parameter(torch.zeros(acts_dim, dtype=dtype))
 
-def train_autoencoder(clip_model_name):
+        self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
+        
 
-    '''
-    changed it from pipeline to their example in the colab
-    Cause their docs said: Pipeline for training a Sparse Autoencoder on TransformerLens activations
-    And I dont think we are using activations from TLens?????
-    Ask Samiha why pipeline
-    '''
+        self.to(device)
 
-    # pipeline = Pipeline(sweep_config)
-    # num_neurons_fired = pipeline.train_autoencoder()
+    def encode(self, x):
+        x_bias = x - self.b_dec
+        linear = x_bias @ self.W_enc + self.b_enc
+        z_latents = F.relu(linear)     # shape [B, n_hidden]
 
-    sweep_config = get_sweep_config(clip_model_name)
-    sweep(sweep_config=sweep_config)
+        return z_latents
+
+    def decode(self, x):
+        recon_x = x @ self.W_dec + self.b_dec
+        return recon_x
+
+    def forward(self, x):
+        z_latents = self.encode(x)
+        recon_x = self.decode(z_latents)
+
+        return recon_x, z_latents
+    
+
+    @torch.no_grad()
+    def remove_parallel_gradients(self):
+        norms = self.W_dec.norm(dim=-1, keepdim=True) + 1e-8
+        W_dec_normed = self.W_dec / norms
+        W_dec_grad_proj = (self.W_dec.grad * W_dec_normed).sum(-1, keepdim=True) * W_dec_normed
+        self.W_dec.grad -= W_dec_grad_proj
+
+        self.W_dec.data = W_dec_normed
+
+
+def sae_loss(model, x, x_recon, z_latents):
+    recon_loss = (x_recon.float() - x.float()).pow(2).sum(-1).mean(0)
+    l1_loss = model.l1_coeff * (z_latents.float().abs().sum())
+    total_loss = recon_loss + l1_loss
+    return total_loss, recon_loss, l1_loss
+
+# get frequency of neurons for resampling
+@torch.no_grad()
+def get_neuron_freqs(model, dataloader, device, num_batches=25):
+    # z_dim = model.latent_dim
+
+    act_freq_scores = torch.zeros(model.latent_dim, dtype=torch.float32).to(device)
+    total = 0
+
+    for i, batch in enumerate(tqdm(dataloader, total=num_batches)):
+        
+        batch = batch.to(device)        
+        _, z_latents = model(batch)
+        
+        act_freq_scores += (z_latents > 0).sum(0)
+        total += z_latents.shape[0]
+
+    act_freq_scores /= total
+    num_dead = (act_freq_scores==0).float().mean().item()
+    print("Number of dead neurons: ", num_dead)
+    return act_freq_scores
+
+# reiniitialize dead neurons
+@torch.no_grad()
+def re_initialize(indices, model):
+    new_W_enc = (torch.nn.init.kaiming_uniform_(torch.zeros_like(model.W_enc)))
+    new_W_dec = (torch.nn.init.kaiming_uniform_(torch.zeros_like(model.W_dec)))
+    new_b_enc = (torch.zeros_like(model.b_enc))
+
+    print(new_W_dec.shape, new_W_enc.shape, new_b_enc.shape)
+    model.W_enc.data[:, indices] = new_W_enc[:, indices]
+    model.W_dec.data[indices, :] = new_W_dec[indices, :]
+    model.b_enc.data[indices] = new_b_enc[indices]

@@ -2,12 +2,10 @@ import clip
 import torch
 from PIL import Image
 from io import BytesIO
-import requests
 from datasets import load_dataset, Dataset
 from tqdm import tqdm
 import numpy as np
 from torch.utils.data import DataLoader, Dataset as TorchDataset
-from functools import partial
 
 # from config import device
 
@@ -83,7 +81,7 @@ def extract_features(csv_file, clip_model, preprocess, device):
         paths = batch["image_path"]
         images = images.to(device)
         with torch.no_grad():
-            features = clip_model.encode_image(images)  # # shape: [B, 3, H, W]
+            features = clip_model.encode_image(images)  # # shape: [B, D]
         for feature, path in zip(features, paths):
             all_features.append(feature.cpu().numpy())
             all_image_paths.append(path)
