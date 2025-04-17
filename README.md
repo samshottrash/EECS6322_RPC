@@ -1,14 +1,24 @@
 # EECS6322_RPC
 Reproducibility Challenge for EECS6322 (Neural Networks and Deep Learning) Project
 
-## Below we outline the process to the run the get and get the concepts
- - run to create the conda environment: conda env create --file environment.yaml
- - activate the conda environment with: conda activate eecs6322-rpc
+In this repo, we attempt to reproduce two main contributions described in the paper: 
 
- - The cc3m image dataset clip embeddings have been provided. But to extract them run: python extract_clip_embeds.py
- - To train the sae model on cc3m and discover concepts: python train_sae.py
- - To automatically assign concept names to the learned features of the sae: python auto_concept_naming.py
+[**Discover-then-Name: Task-Agnostic Concept Bottlenecks via Automated Concept Discovery**](https://arxiv.org/abs/2407.14499)
 
-We visualize the top activating images on the following datasets: cifar10, cifar100 and imagenet.
-An example notebook for visualizing the images is provided in: 
+The two contributions are: 
+  1)  Use sparse autoencoders (SAEs) to discover concepts learnt by CLIP
+  2)  Automatically name the discovered concepts
+
+## Below we outline the process to run the files and get the concepts
+
+ - The cc3m image dataset clip embeddings have been provided. But to extract them run: `python extract_clip_embeds.py`
+ - To train the sae model on the cc3m clip embeddings and discover concepts: `python train_sae.py`
+ - To automatically assign concept names to the learned features of the sae: `python auto_concept_naming.py`
+
+We visualize the top activating images on the following datasets: 
+- [cifar10](https://pytorch.org/vision/main/generated/torchvision.datasets.CIFAR10.html) 
+- [cifar100](https://pytorch.org/vision/main/generated/torchvision.datasets.CIFAR100.html)
+- [ImageNet](https://www.image-net.org/)
+
+An example notebook for visualizing the images is provided in: [notebook](visualizing.ipynb)
  
