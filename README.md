@@ -11,7 +11,6 @@ The two contributions are:
 
 ## Below we outline the process to run the files and get the concepts
 
- - The cc3m image dataset clip embeddings have been provided. But to extract them run: `python extract_clip_embeds.py`
  - To train the sae model on the cc3m clip embeddings and discover concepts: `python train_sae.py`
  - To automatically assign concept names to the learned features of the sae: `python auto_concept_naming.py`
 
