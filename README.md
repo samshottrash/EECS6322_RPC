@@ -1,4 +1,4 @@
-# EECS6322_RPC
+# EECS6322-RPC
 Reproducibility Challenge for EECS6322 (Neural Networks and Deep Learning) Project
 
 In this repo, we attempt to reproduce two main contributions described in the paper: 
@@ -8,6 +8,14 @@ In this repo, we attempt to reproduce two main contributions described in the pa
 The two contributions are: 
   1)  Use sparse autoencoders (SAEs) to discover concepts learnt by CLIP
   2)  Automatically name the discovered concepts
+
+## Scripts and Files explanations
+- `utils.py, extract_clip_embeds.py` contains various functions for loading the clip model and extract embeddings
+- `sae.py` defines the sparse autoencoder model. `train_sae.py` is for training the model.
+- `auto_concept_naming.py` assigns concept names to the learned features using the `vocab.txt` words.
+- `assigned_concept_names.csv` contains the neuron index and its associated name.
+- `sae_checkpoints` contains a trained sae model
+- `top_concept_images` contains the top activating images for the sae neurons across vraious datasets.
 
 ## Below we outline the process to run the files and get the concepts
 
